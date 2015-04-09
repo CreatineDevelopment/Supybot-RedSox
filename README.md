@@ -1,0 +1,1 @@
+A simple Supybot plugin that gets the current Red Sox game information and relays it in IRC chat.
