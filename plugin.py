@@ -27,12 +27,12 @@ class RedSox(callbacks.Plugin):
 	def _getLineScoreXML(self, gameID):
 		url = self._MLB + gameID + self._BOXSCORE
 		try:
-			response = urllib2.urlopen(url).read()
+			response = requests.get(url).text
 		except HTTPError:
 			print 'ERROR'
 			return
-		else:
-			xml = ET.fromstring(response)
+
+		xml = ET.fromstring(response)
 
 		return xml
 
@@ -43,17 +43,23 @@ class RedSox(callbacks.Plugin):
 
 		dateURL = self._MLBDATE % (year, month, day)
 		url = self._MLB + self._MLBCOMP + dateURL + self._SUMMARY
-		response = urllib2.urlopen(url).read()
+
+		try:
+			response = requests.get(url).text
+		except HTTPError:
+			print 'ERROR'
+			return
 
 		xml = ET.fromstring(response)
+
 		for game in xml.findall("game"):
-			home = game.findall("[@home_name_abbrev='%s'" % self._REDSOX)
-			away = game.findall("[@away_name_abbrev='%s'" % self._REDSOX)
+			home = game.get("home_name_abbrev")
+			away = game.get("away_name_abbrev")
 			gameID = game.get("game_data_directory")
 			if (home == self._REDSOX) or (away == self._REDSOX):
 				return gameID
 
-		return ""
+		return
 
 	def _getBlockSize(self, item, xml):
 		awayField = "away_%s" % item
@@ -83,7 +89,7 @@ class RedSox(callbacks.Plugin):
 		linescore = xml.find("linescore")
 		inningList = linescore.findall("inning_line_score")
 		# for inning in range(1, len(inningList)):
-		for inning in range(max(10, len(inningList))):
+		for inning in range(max(9, len(inningList))):
 			if inning < len(inningList):
 				inningscore = inningList[inning]
 				score = inningscore.get(team) or " "
@@ -105,6 +111,34 @@ class RedSox(callbacks.Plugin):
 		score = linescore.get(scoreField)
 		blockSize = self._getBlockSize("team_runs", linescore)
 
+		scoreBlock = ircutils.bold(" %s ")
+		if len(score) != blockSize:
+			for i in range(blockSize - len(score)):
+				scoreBlock += " "
+		scoreBlock += "|"
+		
+		scoreBlock %= score
+
+		line += scoreBlock
+
+		scoreField = "%s_team_hits" % team
+		score = linescore.get(scoreField)
+		blockSize = self._getBlockSize("team_hits", linescore)
+
+		scoreBlock = " %s "
+		if len(score) != blockSize:
+			for i in range(blockSize - len(score)):
+				scoreBlock += " "
+		scoreBlock += "|"
+		
+		scoreBlock %= score
+
+		line += scoreBlock
+
+		scoreField = "%s_team_errors" % team
+		score = linescore.get(scoreField)
+		blockSize = self._getBlockSize("team_errors", linescore)
+
 		scoreBlock = " %s "
 		if len(score) != blockSize:
 			for i in range(blockSize - len(score)):
@@ -123,12 +157,18 @@ class RedSox(callbacks.Plugin):
 		Returns the line score of the Red Sox game taking place today.
 		"""
 		gameID = self._getGameID()
-		if gameID != "":
+		if gameID:
 			xml = self._getLineScoreXML(gameID)
-			away = self._getLineScore("away", xml)
-			home = self._getLineScore("home", xml)
-			irc.reply(away)
-			irc.reply(home)
+			if xml:
+				away = self._getLineScore("away", xml)
+				home = self._getLineScore("home", xml)
+
+				irc.reply(away)
+				irc.reply(home)
+			else:
+				irc.reply("Game hasn't started yet :(")
+		else:
+			irc.reply("No game today :(")
 	score = wrap(score)
 
 Class = RedSox
